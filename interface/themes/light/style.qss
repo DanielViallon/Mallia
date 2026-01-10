@@ -1,0 +1,346 @@
+/* ===========================
+   THEME CLAIR - MALLIA 2026
+   Style moderne minimaliste avec glassmorphism
+   =========================== */
+
+/* --- FENÊTRE PRINCIPALE --- */
+QMainWindow {
+    background-color: #F5F7FA;
+}
+
+/* --- SIDEBAR MENU --- */
+#sidebar {
+    background-color: rgba(255, 255, 255, 0.95);
+    border-right: 1px solid #E5E9F0;
+}
+
+#sidebar_header {
+    background-color: transparent;
+    border-bottom: 1px solid #E5E9F0;
+}
+
+#logo_label {
+    color: #2E3440;
+    font-size: 20px;
+    font-weight: 600;
+    padding: 10px;
+}
+
+#app_title_label {
+    color: #2E3440;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* --- BOUTONS DU MENU --- */
+QPushButton#menu_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    text-align: left;
+    color: #4C566A;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+QPushButton#menu_button:hover {
+    background-color: rgba(94, 129, 172, 0.1);
+    color: #5E81AC;
+}
+
+QPushButton#menu_button:pressed {
+    background-color: rgba(94, 129, 172, 0.2);
+}
+
+QPushButton#menu_button_active {
+    background-color: rgba(94, 129, 172, 0.15);
+    color: #5E81AC;
+    border-left: 3px solid #5E81AC;
+    font-weight: 600;
+}
+
+QPushButton#parametres_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    text-align: left;
+    color: #5E81AC;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+QPushButton#parametres_button:hover {
+    background-color: rgba(94, 129, 172, 0.15);
+}
+
+QPushButton#parametres_button:pressed {
+    background-color: rgba(94, 129, 172, 0.25);
+}
+
+QPushButton#quit_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 12px;
+    padding: 12px 16px;
+    text-align: left;
+    color: #BF616A;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+QPushButton#quit_button:hover {
+    background-color: rgba(191, 97, 106, 0.1);
+}
+
+QPushButton#quit_button:pressed {
+    background-color: rgba(191, 97, 106, 0.2);
+}
+
+/* --- BARRE DE TITRE PERSONNALISÉE --- */
+#title_bar {
+    background-color: rgba(255, 255, 255, 0.8);
+    border-bottom: 1px solid #E5E9F0;
+}
+
+/* Boutons macOS style */
+QPushButton#close_button {
+    background-color: #BF616A;
+    border: none;
+    border-radius: 7px;
+    min-width: 14px;
+    max-width: 14px;
+    min-height: 14px;
+    max-height: 14px;
+}
+
+QPushButton#close_button:hover {
+    background-color: #A74D56;
+}
+
+QPushButton#minimize_button {
+    background-color: #F4BF4F;
+    border: none;
+    border-radius: 7px;
+    min-width: 14px;
+    max-width: 14px;
+    min-height: 14px;
+    max-height: 14px;
+}
+
+QPushButton#minimize_button:hover {
+    background-color: #F0B541;
+}
+
+QPushButton#maximize_button {
+    background-color: #A3BE8C;
+    border: none;
+    border-radius: 7px;
+    min-width: 14px;
+    max-width: 14px;
+    min-height: 14px;
+    max-height: 14px;
+}
+
+QPushButton#maximize_button:hover {
+    background-color: #93AE7C;
+}
+
+QPushButton#menu_toggle_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    color: #4C566A;
+}
+
+QPushButton#menu_toggle_button:hover {
+    background-color: rgba(94, 129, 172, 0.1);
+}
+
+QPushButton#theme_toggle_button {
+    background-color: transparent;
+    border: none;
+    border-radius: 8px;
+    padding: 8px;
+    color: #4C566A;
+    font-size: 16px;
+}
+
+QPushButton#theme_toggle_button:hover {
+    background-color: rgba(94, 129, 172, 0.1);
+}
+
+/* --- ZONE DE CONTENU --- */
+#content_area {
+    background-color: #F5F7FA;
+    border: none;
+}
+
+/* Page d'accueil avec logo en filigrane */
+#home_page {
+    background-color: #F5F7FA;
+}
+
+#watermark_logo {
+    color: rgba(94, 129, 172, 0.25);
+}
+
+/* --- SCROLLBAR --- */
+QScrollBar:vertical {
+    background-color: transparent;
+    width: 10px;
+    margin: 0;
+}
+
+QScrollBar::handle:vertical {
+    background-color: rgba(76, 86, 106, 0.3);
+    border-radius: 5px;
+    min-height: 20px;
+}
+
+QScrollBar::handle:vertical:hover {
+    background-color: rgba(76, 86, 106, 0.5);
+}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
+    height: 0px;
+}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {
+    background: none;
+}
+
+/* --- WIDGETS GÉNÉRAUX --- */
+QLabel {
+    color: #2E3440;
+    background-color: transparent;
+}
+
+QWidget {
+    font-family: "Segoe UI", "Arial", sans-serif;
+}
+
+/* --- TABLEAUX --- */
+QTableWidget {
+    background-color: white;
+    alternate-background-color: #F8F9FA;
+}
+
+QTableWidget::item {
+    background-color: white;
+    /* PAS de color: ici pour laisser le code Python gérer les couleurs */
+}
+
+QTableWidget::item:alternate {
+    background-color: #F8F9FA;
+}
+
+QTableWidget::item:selected {
+    background-color: rgba(94, 129, 172, 0.2);
+    /* PAS de color: ici pour laisser le code Python gérer les couleurs */
+}
+
+/* --- MESSAGE BOX --- */
+QMessageBox {
+    background-color: white;
+}
+
+QMessageBox QLabel {
+    color: #2E3440;
+    font-size: 13px;
+    min-width: 300px;
+}
+
+QMessageBox QPushButton {
+    background-color: #5E81AC;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    font-weight: bold;
+    min-width: 80px;
+}
+
+QMessageBox QPushButton:hover {
+    background-color: #4C6A94;
+}
+
+QMessageBox QPushButton:pressed {
+    background-color: #3D5577;
+}
+
+/* --- WIDGETS SPÉCIFIQUES POUR MODULES --- */
+QScrollArea {
+    background-color: #F5F7FA;
+    border: none;
+}
+
+#parametres_content {
+    background-color: #F5F7FA;
+}
+
+QGroupBox {
+    background-color: white;
+    color: #2E3440;
+    border: 2px solid #E5E9F0;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding-top: 15px;
+}
+
+QGroupBox::title {
+    color: #2E3440;
+    subcontrol-origin: margin;
+    left: 10px;
+    padding: 0 5px;
+}
+
+QLineEdit {
+    background-color: white;
+    color: #2E3440;
+    border: 1px solid #E5E9F0;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 13px;
+}
+
+QLineEdit:focus {
+    border: 2px solid #5E81AC;
+}
+
+QLineEdit::placeholder {
+    color: #A0A8B8;
+}
+
+QFormLayout QLabel {
+    color: #2E3440;
+    background-color: transparent;
+    font-size: 13px;
+}
+
+QComboBox {
+    background-color: white;
+    color: #2E3440;
+    border: 1px solid #E5E9F0;
+    border-radius: 6px;
+    padding: 5px;
+}
+
+QComboBox:focus {
+    border: 2px solid #5E81AC;
+}
+
+QComboBox::drop-down {
+    border: none;
+}
+
+QComboBox QAbstractItemView {
+    background-color: white;
+    color: #2E3440;
+    selection-background-color: #5E81AC;
+    selection-color: white;
+}
