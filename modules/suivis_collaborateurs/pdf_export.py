@@ -86,14 +86,14 @@ class SuivisCollaborateursPDFExporter:
             True si succès, False sinon
         """
         try:
-            # Créer le document en mode paysage
+            # Créer le document en mode PORTRAIT
             doc = SimpleDocTemplate(
                 filepath,
-                pagesize=landscape(A4),
-                rightMargin=1.5*cm,
-                leftMargin=1.5*cm,
-                topMargin=1.5*cm,
-                bottomMargin=1.5*cm
+                pagesize=A4,  # Portrait par défaut
+                rightMargin=0,
+                leftMargin=0,
+                topMargin=0,
+                bottomMargin=0
             )
             
             # Éléments du document
@@ -116,31 +116,39 @@ class SuivisCollaborateursPDFExporter:
             subtitle = f"Généré le {date_generation}"
             elements.append(Paragraph(subtitle, self.date_style))
             
-            # Calculer la taille des tableaux pour qu'ils rentrent sur une page
-            nb_collaborateurs = len(donnees_collaborateurs)
-            
             # Pour chaque collaborateur
             for idx, collab_data in enumerate(donnees_collaborateurs):
                 # Nom du collaborateur
                 nom_complet = f"{collab_data['prenom']} {collab_data['nom']}"
                 elements.append(Paragraph(nom_complet, self.nom_collab_style))
                 
-                # Créer le tableau
-                table_data = self._creer_donnees_tableau(periodes_data, collab_data['donnees'])
+                # Créer le tableau (filtrer les lignes vides)
+                table_data = self._creer_donnees_tableau_filtrees(periodes_data, collab_data['donnees'])
                 
-                # Ajuster la taille des colonnes selon le nombre de collaborateurs
-                if nb_collaborateurs <= 2:
-                    col_widths = [3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2*cm, 2*cm, 2*cm]
-                    font_size = 9
-                    padding = 6
-                else:
-                    col_widths = [3*cm, 2.2*cm, 2.2*cm, 2.2*cm, 1.8*cm, 1.8*cm, 1.8*cm]
-                    font_size = 8
-                    padding = 4
+                # Si pas de données, ne pas afficher ce collaborateur
+                if len(table_data) <= 1:  # Seulement l'en-tête
+                    continue
+                
+                # Largeur totale disponible : 21cm (A4) sans marges
+                largeur_totale = 21*cm
+                
+                # Répartition des colonnes
+                col_widths = [
+                    largeur_totale * 0.25,  # Périodes: 25%
+                    largeur_totale * 0.125, # C.A. Prestation: 12.5%
+                    largeur_totale * 0.125, # C.A. /Jour: 12.5%
+                    largeur_totale * 0.125, # Nb Visites: 12.5%
+                    largeur_totale * 0.125, # % Ventes: 12.5%
+                    largeur_totale * 0.125, # % Couleurs: 12.5%
+                    largeur_totale * 0.125  # % Soins: 12.5%
+                ]
                 
                 table = Table(table_data, colWidths=col_widths)
                 
                 # Style du tableau
+                font_size = 8
+                padding = 4
+                
                 style_commands = [
                     # En-tête
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#5E81AC')),
@@ -178,12 +186,9 @@ class SuivisCollaborateursPDFExporter:
                 table.setStyle(TableStyle(style_commands))
                 elements.append(table)
                 
-                # Ajouter un espace entre les collaborateurs (sauf le dernier)
-                if idx < nb_collaborateurs - 1:
-                    if nb_collaborateurs <= 2:
-                        elements.append(Spacer(1, 0.5*cm))
-                    else:
-                        elements.append(Spacer(1, 0.3*cm))
+                # Ajouter un espace entre les collaborateurs
+                if idx < len(donnees_collaborateurs) - 1:
+                    elements.append(Spacer(1, 0.3*cm))
             
             # Générer le PDF
             doc.build(elements)
@@ -196,10 +201,10 @@ class SuivisCollaborateursPDFExporter:
             traceback.print_exc()
             return False
     
-    def _creer_donnees_tableau(self, periodes_data: List[tuple], 
-                               donnees: List[Dict[str, Any]]) -> List[List[str]]:
+    def _creer_donnees_tableau_filtrees(self, periodes_data: List[tuple], 
+                                        donnees: List[Dict[str, Any]]) -> List[List[str]]:
         """
-        Crée les données du tableau pour le PDF
+        Crée les données du tableau pour le PDF en filtrant les lignes vides
         
         Args:
             periodes_data: Liste des tuples (date_debut, date_fin)
@@ -222,9 +227,23 @@ class SuivisCollaborateursPDFExporter:
         # Premier jour travaillé
         premier_jour_travaille = periodes_data[0][0] if periodes_data else None
         
-        # Données
+        # Données (filtrer les lignes vides)
         for i, (date_debut, date_fin) in enumerate(periodes_data):
             periode_data = donnees[i] if i < len(donnees) else {}
+            
+            # Vérifier si la ligne a au moins une donnée
+            has_data = (
+                periode_data.get('ca_prestation') or 
+                periode_data.get('ca_par_jour') or 
+                periode_data.get('nombre_visites') or 
+                periode_data.get('pourcentage_ventes') or 
+                periode_data.get('pourcentage_couleurs') or 
+                periode_data.get('pourcentage_soins')
+            )
+            
+            # Ne pas inclure la ligne si elle est vide
+            if not has_data:
+                continue
             
             row = [
                 formater_periode(date_debut, date_fin, premier_jour_travaille),

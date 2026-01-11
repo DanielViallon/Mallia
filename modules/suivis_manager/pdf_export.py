@@ -3,15 +3,12 @@ Génération de PDF pour le module Suivis Manager
 """
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from datetime import datetime
 from typing import List, Dict, Any
-import os
 
 from .utils import formater_montant, formater_pourcentage, charger_objectifs, charger_info_salon
 
@@ -91,14 +88,14 @@ class SuivisManagerPDFExporter:
             True si succès, False sinon
         """
         try:
-            # Créer le document en mode paysage
+            # Créer le document en mode PORTRAIT
             doc = SimpleDocTemplate(
                 filepath,
-                pagesize=landscape(A4),
-                rightMargin=2*cm,
-                leftMargin=2*cm,
-                topMargin=2*cm,
-                bottomMargin=2*cm
+                pagesize=A4,  # Portrait par défaut
+                rightMargin=0,
+                leftMargin=0,
+                topMargin=0,
+                bottomMargin=0
             )
             
             # Éléments du document
@@ -121,21 +118,27 @@ class SuivisManagerPDFExporter:
             subtitle = f"Généré le {date_generation}"
             elements.append(Paragraph(subtitle, self.date_style))
             
-            elements.append(Spacer(1, 0.5*cm))
+            elements.append(Spacer(1, 0.3*cm))
             
-            # Créer le tableau
-            table_data = self._creer_donnees_tableau(periodes_data, donnees)
+            # Créer le tableau (filtrer les lignes vides)
+            table_data = self._creer_donnees_tableau_filtrees(periodes_data, donnees)
+            
+            # Largeur totale disponible : 21cm (A4) - 2cm (marges) = 19cm
+            largeur_totale = 19*cm
+            
+            # Répartition des colonnes
+            col_widths = [
+                largeur_totale * 0.25,  # Périodes: 25%
+                largeur_totale * 0.125, # C.A. Total: 12.5%
+                largeur_totale * 0.125, # C.A. /Jour: 12.5%
+                largeur_totale * 0.125, # Nombre de Visites: 12.5%
+                largeur_totale * 0.125, # % Ventes: 12.5%
+                largeur_totale * 0.125, # % Couleurs: 12.5%
+                largeur_totale * 0.125  # % Soins: 12.5%
+            ]
             
             # Créer le tableau avec ReportLab
-            table = Table(table_data, colWidths=[
-                4.5*cm,  # Périodes
-                3*cm,    # C.A. Total
-                3*cm,    # C.A. /Jour
-                3*cm,    # Nombre de Visites
-                2.5*cm,  # % Ventes
-                2.5*cm,  # % Couleurs
-                2.5*cm   # % Soins
-            ])
+            table = Table(table_data, colWidths=col_widths)
             
             # Style de base du tableau
             style_commands = [
@@ -144,17 +147,19 @@ class SuivisManagerPDFExporter:
                 ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
                 ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
                 ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-                ('FONTSIZE', (0, 0), (-1, 0), 11),
-                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-                ('TOPPADDING', (0, 0), (-1, 0), 12),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('TOPPADDING', (0, 0), (-1, 0), 10),
                 
                 # Colonne Périodes (gras, fond gris)
                 ('BACKGROUND', (0, 1), (0, -1), colors.HexColor('#E5E9F0')),
                 ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
                 ('ALIGN', (0, 1), (0, -1), 'LEFT'),
+                ('FONTSIZE', (0, 1), (0, -1), 8),
                 
                 # Autres colonnes (centrées)
                 ('ALIGN', (1, 1), (-1, -1), 'CENTER'),
+                ('FONTSIZE', (1, 1), (-1, -1), 8),
                 
                 # Lignes alternées
                 ('ROWBACKGROUNDS', (1, 1), (-1, -1), [colors.white, colors.HexColor('#F8F9FA')]),
@@ -164,64 +169,74 @@ class SuivisManagerPDFExporter:
                 ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#5E81AC')),
                 
                 # Padding
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                ('TOPPADDING', (0, 1), (-1, -1), 10),
-                ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                ('TOPPADDING', (0, 1), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
             ]
             
-            # Appliquer les couleurs selon les objectifs
-            for i in range(len(donnees)):
-                row_index = i + 1  # +1 car la première ligne est l'en-tête
-                data = donnees[i]
+            # Appliquer les couleurs selon les objectifs (ajuster les indices selon les lignes filtrées)
+            ligne_actuelle = 1  # Commence à 1 car 0 est l'en-tête
+            for i, data in enumerate(donnees):
+                # Vérifier si cette ligne a été incluse (pas vide)
+                has_data = (
+                    data.get('ca_total') or data.get('ca_par_jour') or 
+                    data.get('nombre_visites') or data.get('pourcentage_ventes') or 
+                    data.get('pourcentage_couleurs') or data.get('pourcentage_soins')
+                )
+                
+                if not has_data:
+                    continue
                 
                 # C.A. Total (colonne 1)
                 ca_total = data.get('ca_total')
                 if ca_total and self.objectifs.get('ca_total'):
                     couleur = self._get_couleur_objectif(ca_total, self.objectifs['ca_total'])
-                    style_commands.append(('TEXTCOLOR', (1, row_index), (1, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (1, ligne_actuelle), (1, ligne_actuelle), couleur))
                     if ca_total >= self.objectifs['ca_total']:
-                        style_commands.append(('FONTNAME', (1, row_index), (1, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (1, ligne_actuelle), (1, ligne_actuelle), 'Helvetica-Bold'))
                 
                 # C.A. /Jour (colonne 2)
                 ca_jour = data.get('ca_par_jour')
                 if ca_jour and self.objectifs.get('ca_jour'):
                     couleur = self._get_couleur_objectif(ca_jour, self.objectifs['ca_jour'])
-                    style_commands.append(('TEXTCOLOR', (2, row_index), (2, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (2, ligne_actuelle), (2, ligne_actuelle), couleur))
                     if ca_jour >= self.objectifs['ca_jour']:
-                        style_commands.append(('FONTNAME', (2, row_index), (2, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (2, ligne_actuelle), (2, ligne_actuelle), 'Helvetica-Bold'))
                 
                 # Nombre de Visites (colonne 3)
                 nb_visites = data.get('nombre_visites')
                 if nb_visites and self.objectifs.get('nb_clients'):
                     couleur = self._get_couleur_objectif(float(nb_visites), self.objectifs['nb_clients'])
-                    style_commands.append(('TEXTCOLOR', (3, row_index), (3, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (3, ligne_actuelle), (3, ligne_actuelle), couleur))
                     if nb_visites >= self.objectifs['nb_clients']:
-                        style_commands.append(('FONTNAME', (3, row_index), (3, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (3, ligne_actuelle), (3, ligne_actuelle), 'Helvetica-Bold'))
                 
                 # % Ventes (colonne 4)
                 pct_ventes = data.get('pourcentage_ventes')
                 if pct_ventes and self.objectifs.get('pct_ventes'):
                     couleur = self._get_couleur_objectif(pct_ventes, self.objectifs['pct_ventes'])
-                    style_commands.append(('TEXTCOLOR', (4, row_index), (4, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (4, ligne_actuelle), (4, ligne_actuelle), couleur))
                     if pct_ventes >= self.objectifs['pct_ventes']:
-                        style_commands.append(('FONTNAME', (4, row_index), (4, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (4, ligne_actuelle), (4, ligne_actuelle), 'Helvetica-Bold'))
                 
                 # % Couleurs (colonne 5)
                 pct_couleurs = data.get('pourcentage_couleurs')
                 if pct_couleurs and self.objectifs.get('pct_couleurs'):
                     couleur = self._get_couleur_objectif(pct_couleurs, self.objectifs['pct_couleurs'])
-                    style_commands.append(('TEXTCOLOR', (5, row_index), (5, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (5, ligne_actuelle), (5, ligne_actuelle), couleur))
                     if pct_couleurs >= self.objectifs['pct_couleurs']:
-                        style_commands.append(('FONTNAME', (5, row_index), (5, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (5, ligne_actuelle), (5, ligne_actuelle), 'Helvetica-Bold'))
                 
                 # % Soins (colonne 6)
                 pct_soins = data.get('pourcentage_soins')
                 if pct_soins and self.objectifs.get('pct_soins'):
                     couleur = self._get_couleur_objectif(pct_soins, self.objectifs['pct_soins'])
-                    style_commands.append(('TEXTCOLOR', (6, row_index), (6, row_index), couleur))
+                    style_commands.append(('TEXTCOLOR', (6, ligne_actuelle), (6, ligne_actuelle), couleur))
                     if pct_soins >= self.objectifs['pct_soins']:
-                        style_commands.append(('FONTNAME', (6, row_index), (6, row_index), 'Helvetica-Bold'))
+                        style_commands.append(('FONTNAME', (6, ligne_actuelle), (6, ligne_actuelle), 'Helvetica-Bold'))
+                
+                ligne_actuelle += 1
             
             table.setStyle(TableStyle(style_commands))
             
@@ -238,10 +253,10 @@ class SuivisManagerPDFExporter:
             traceback.print_exc()
             return False
     
-    def _creer_donnees_tableau(self, periodes_data: List[tuple], 
-                               donnees: List[Dict[str, Any]]) -> List[List[str]]:
+    def _creer_donnees_tableau_filtrees(self, periodes_data: List[tuple], 
+                                        donnees: List[Dict[str, Any]]) -> List[List[str]]:
         """
-        Crée les données du tableau pour le PDF
+        Crée les données du tableau pour le PDF en filtrant les lignes vides
         
         Args:
             periodes_data: Liste des tuples (date_debut, date_fin)
@@ -255,7 +270,7 @@ class SuivisManagerPDFExporter:
             'Périodes',
             'C.A. Total',
             'C.A. /Jour',
-            'Nombre de Visites',
+            'Nb Visites',
             '% Ventes',
             '% Couleurs',
             '% Soins'
@@ -264,11 +279,25 @@ class SuivisManagerPDFExporter:
         # Récupérer le premier jour travaillé
         premier_jour_travaille = periodes_data[0][0] if periodes_data else None
         
-        # Données
+        # Données (filtrer les lignes vides)
         from .utils import formater_periode
         
         for i, (date_debut, date_fin) in enumerate(periodes_data):
             periode_data = donnees[i] if i < len(donnees) else {}
+            
+            # Vérifier si la ligne a au moins une donnée
+            has_data = (
+                periode_data.get('ca_total') or 
+                periode_data.get('ca_par_jour') or 
+                periode_data.get('nombre_visites') or 
+                periode_data.get('pourcentage_ventes') or 
+                periode_data.get('pourcentage_couleurs') or 
+                periode_data.get('pourcentage_soins')
+            )
+            
+            # Ne pas inclure la ligne si elle est vide
+            if not has_data:
+                continue
             
             row = [
                 formater_periode(date_debut, date_fin, premier_jour_travaille),

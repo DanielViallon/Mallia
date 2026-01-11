@@ -213,13 +213,14 @@ class SuivisCollaborateursDB:
         Un collaborateur est considéré actif si :
         - Il est actuellement actif (etat = 'Actif')
         - OU il était actif durant ce mois (date_inactivation >= dernier jour du mois)
+        - ET sa date d'entrée est <= dernier jour du mois
         
         Args:
             mois: Numéro du mois (1-12)
             annee: Année
             
         Returns:
-            Liste des collaborateurs
+            Liste des collaborateurs triés par ordre
         """
         from datetime import datetime
         import calendar
@@ -230,11 +231,11 @@ class SuivisCollaborateursDB:
         
         query = """
             SELECT * FROM collaborateurs 
-            WHERE etat = 'Actif' 
-               OR (etat = 'Inactif' AND date_inactivation >= ?)
-            ORDER BY nom, prenom
+            WHERE (etat = 'Actif' OR (etat = 'Inactif' AND date_inactivation >= ?))
+              AND (date_entree IS NULL OR date_entree <= ?)
+            ORDER BY ordre
         """
-        return self.db.fetch_all(query, (date_limite,))
+        return self.db.fetch_all(query, (date_limite, date_limite))
     
     def get_tous_les_suivis_mois(self, mois: int, annee: int) -> List[Dict[str, Any]]:
         """
@@ -245,13 +246,13 @@ class SuivisCollaborateursDB:
             annee: Année
             
         Returns:
-            Liste des suivis avec infos collaborateurs
+            Liste des suivis avec infos collaborateurs triés par ordre
         """
         query = """
-            SELECT sc.*, c.nom, c.prenom, c.etat
+            SELECT sc.*, c.nom, c.prenom, c.etat, c.ordre
             FROM suivis_collaborateurs sc
             JOIN collaborateurs c ON sc.collaborateur_id = c.id
             WHERE sc.mois = ? AND sc.annee = ?
-            ORDER BY c.nom, c.prenom
+            ORDER BY c.ordre
         """
         return self.db.fetch_all(query, (mois, annee))

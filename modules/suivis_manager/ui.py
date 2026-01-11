@@ -22,6 +22,23 @@ from .utils import (
 )
 
 
+def normaliser_decimal(texte: str) -> str:
+    """Convertit les points en virgules pour la saisie française"""
+    return texte.replace('.', ',')
+
+
+def parser_decimal(texte: str) -> Optional[float]:
+    """Parse un nombre avec virgule ou point"""
+    if not texte or texte.strip() == "":
+        return None
+    # Remplacer la virgule par un point pour Python
+    texte_nettoye = texte.replace(',', '.').replace(' ', '').strip()
+    try:
+        return float(texte_nettoye)
+    except ValueError:
+        return None
+
+
 class SuivisManagerWidget(QWidget):
     """Widget principal pour le module Suivis Manager"""
     
@@ -31,6 +48,7 @@ class SuivisManagerWidget(QWidget):
         self.suivi_id_courant = None
         self.periodes_dates = []  # Stocke les dates des périodes
         self.objectifs = {}  # Sera chargé dynamiquement
+        self.donnees_modifiees = False  # Flag pour sauvegarde auto
         
         self._init_ui()
         self._charger_mois_courant()
@@ -61,7 +79,7 @@ class SuivisManagerWidget(QWidget):
             "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
             "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
         ])
-        self.mois_combo.currentIndexChanged.connect(self._on_mois_annee_change)
+        self.mois_combo.currentIndexChanged.connect(self._on_mois_annee_change_with_save)
         header_layout.addWidget(self.mois_combo)
         
         # Sélecteur d'année
@@ -71,7 +89,7 @@ class SuivisManagerWidget(QWidget):
         for annee in range(annee_actuelle - 5, annee_actuelle + 5):
             self.annee_combo.addItem(str(annee))
         self.annee_combo.setCurrentText(str(annee_actuelle))
-        self.annee_combo.currentIndexChanged.connect(self._on_mois_annee_change)
+        self.annee_combo.currentIndexChanged.connect(self._on_mois_annee_change_with_save)
         header_layout.addWidget(self.annee_combo)
         
         layout.addLayout(header_layout)
@@ -80,7 +98,7 @@ class SuivisManagerWidget(QWidget):
         buttons_layout = QHBoxLayout()
         
         self.btn_nouveau = QPushButton("📝 Nouveau Mois")
-        self.btn_nouveau.clicked.connect(self._nouveau_mois)
+        self.btn_nouveau.clicked.connect(self._nouveau_mois_with_save)
         buttons_layout.addWidget(self.btn_nouveau)
         
         self.btn_sauvegarder = QPushButton("💾 Sauvegarder")
@@ -88,11 +106,11 @@ class SuivisManagerWidget(QWidget):
         buttons_layout.addWidget(self.btn_sauvegarder)
         
         self.btn_exporter = QPushButton("📄 Exporter PDF")
-        self.btn_exporter.clicked.connect(self._exporter_pdf)
+        self.btn_exporter.clicked.connect(self._exporter_pdf_with_save)
         buttons_layout.addWidget(self.btn_exporter)
         
         self.btn_reinitialiser = QPushButton("🔄 Réinitialiser le mois")
-        self.btn_reinitialiser.clicked.connect(self._reinitialiser_mois)
+        self.btn_reinitialiser.clicked.connect(self._reinitialiser_mois_with_save)
         self.btn_reinitialiser.setStyleSheet("""
             QPushButton {
                 background-color: #BF616A;
@@ -114,27 +132,17 @@ class SuivisManagerWidget(QWidget):
     
     def _appliquer_couleur_objectif(self, item: QTableWidgetItem, valeur: Optional[float], 
                                      objectif: Optional[float], is_pourcentage: bool = False):
-        """
-        Applique la couleur à un item en fonction de l'objectif
-        
-        Args:
-            item: QTableWidgetItem à colorer
-            valeur: Valeur actuelle
-            objectif: Valeur objectif
-            is_pourcentage: True si c'est un pourcentage
-        """
+        """Applique la couleur à un item en fonction de l'objectif"""
         if valeur is None or objectif is None:
             return
         
         if valeur >= objectif:
-            # Objectif atteint ou dépassé : vert et gras
-            item.setForeground(QColor(34, 139, 34))  # Vert forêt
+            item.setForeground(QColor(34, 139, 34))
             font = item.font()
             font.setBold(True)
             item.setFont(font)
         else:
-            # Objectif non atteint : rouge
-            item.setForeground(QColor(178, 34, 34))  # Rouge brique
+            item.setForeground(QColor(178, 34, 34))
             font = item.font()
             font.setBold(False)
             item.setFont(font)
@@ -148,23 +156,15 @@ class SuivisManagerWidget(QWidget):
             "% Ventes", "% Couleurs", "% Soins"
         ])
         
-        # Masquer les numéros de lignes
         self.table.verticalHeader().setVisible(False)
         
-        # Configurer l'en-tête
         header = self.table.horizontalHeader()
-        
-        # Colonne Périodes : largeur fixe basée sur le contenu
         header.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        
-        # Autres colonnes : même largeur proportionnelle
         for i in range(1, 7):
             header.setSectionResizeMode(i, QHeaderView.Stretch)
         
-        # Hauteur des lignes
         self.table.verticalHeader().setDefaultSectionSize(50)
         
-        # Style
         self.table.setAlternatingRowColors(True)
         self.table.setStyleSheet("""
             QTableWidget {
@@ -184,18 +184,25 @@ class SuivisManagerWidget(QWidget):
             }
         """)
         
-        # Connecter le signal de modification
+        # Connecter les signaux
         self.table.itemChanged.connect(self._on_item_changed)
+        self.table.currentCellChanged.connect(self._on_cell_exit)
     
     def _charger_mois_courant(self):
         """Charge les données du mois courant"""
         now = datetime.now()
+        self.mois_combo.blockSignals(True)
+        self.annee_combo.blockSignals(True)
         self.mois_combo.setCurrentIndex(now.month - 1)
         self.annee_combo.setCurrentText(str(now.year))
+        self.mois_combo.blockSignals(False)
+        self.annee_combo.blockSignals(False)
         self._charger_donnees()
     
-    def _on_mois_annee_change(self):
-        """Appelé quand le mois ou l'année change"""
+    def _on_mois_annee_change_with_save(self):
+        """Sauvegarde automatique avant changement de mois/année"""
+        if self.donnees_modifiees:
+            self._sauvegarder_donnees_silencieuse()
         self._charger_donnees()
     
     def _charger_donnees(self):
@@ -203,17 +210,13 @@ class SuivisManagerWidget(QWidget):
         mois = self.mois_combo.currentIndex() + 1
         annee = int(self.annee_combo.currentText())
         
-        # Charger les objectifs pour ce mois/année
         self.objectifs = charger_objectifs(annee, mois)
         
-        # Mettre à jour le titre
         mois_nom = self.mois_combo.currentText()
         self.titre_label.setText(f"TABLEAU SUIVI MANAGER {mois_nom.upper()} {annee}")
         
-        # Calculer les périodes
         self.periodes_dates = calculer_periodes_mois(mois, annee)
         
-        # Récupérer ou créer le suivi
         suivi = self.db.get_suivi_by_mois_annee(mois, annee)
         
         if suivi:
@@ -223,50 +226,42 @@ class SuivisManagerWidget(QWidget):
             self.suivi_id_courant = None
             periodes_data = []
         
-        # Remplir le tableau
         self._remplir_tableau(periodes_data)
+        self.donnees_modifiees = False
     
     def _remplir_tableau(self, periodes_data: list):
         """Remplit le tableau avec les données"""
-        # Bloquer les signaux pendant le remplissage
         self.table.blockSignals(True)
         
         self.table.setRowCount(len(self.periodes_dates))
         
-        # Créer un dictionnaire des données par numéro de période
         data_dict = {p['numero_periode']: p for p in periodes_data}
         
-        # Récupérer le premier jour travaillé (première date de la première période)
         premier_jour_travaille = self.periodes_dates[0][0] if self.periodes_dates else None
         
         for i, (date_debut, date_fin) in enumerate(self.periodes_dates):
             numero_periode = i + 1
             
-            # Colonne Périodes (non éditable, en gras) - cumulatif depuis le premier jour travaillé
             periode_item = QTableWidgetItem(formater_periode(date_debut, date_fin, premier_jour_travaille))
             periode_item.setFlags(periode_item.flags() & ~Qt.ItemIsEditable)
             periode_item.setBackground(Qt.lightGray)
-            
-            # Mettre en gras
             font = periode_item.font()
             font.setBold(True)
             periode_item.setFont(font)
-            
             self.table.setItem(i, 0, periode_item)
             
-            # Récupérer les données si elles existent
             data = data_dict.get(numero_periode, {})
             
             # C.A. Total
             ca_total = data.get('ca_total')
-            ca_total_item = QTableWidgetItem(formater_montant(ca_total) if ca_total else "")
+            ca_total_item = QTableWidgetItem(normaliser_decimal(formater_montant(ca_total)) if ca_total else "")
             ca_total_item.setTextAlignment(Qt.AlignCenter)
             self._appliquer_couleur_objectif(ca_total_item, ca_total, self.objectifs.get('ca_total'))
             self.table.setItem(i, 1, ca_total_item)
             
             # C.A. /Jour
             ca_jour = data.get('ca_par_jour')
-            ca_jour_item = QTableWidgetItem(formater_montant(ca_jour) if ca_jour else "")
+            ca_jour_item = QTableWidgetItem(normaliser_decimal(formater_montant(ca_jour)) if ca_jour else "")
             ca_jour_item.setTextAlignment(Qt.AlignCenter)
             self._appliquer_couleur_objectif(ca_jour_item, ca_jour, self.objectifs.get('ca_jour'))
             self.table.setItem(i, 2, ca_jour_item)
@@ -281,44 +276,42 @@ class SuivisManagerWidget(QWidget):
             
             # % Ventes
             pct_ventes = data.get('pourcentage_ventes')
-            pct_ventes_item = QTableWidgetItem(formater_pourcentage(pct_ventes) if pct_ventes else "")
+            pct_ventes_item = QTableWidgetItem(normaliser_decimal(formater_pourcentage(pct_ventes)) if pct_ventes else "")
             pct_ventes_item.setTextAlignment(Qt.AlignCenter)
             self._appliquer_couleur_objectif(pct_ventes_item, pct_ventes, self.objectifs.get('pct_ventes'), True)
             self.table.setItem(i, 4, pct_ventes_item)
             
             # % Couleurs
             pct_couleurs = data.get('pourcentage_couleurs')
-            pct_couleurs_item = QTableWidgetItem(formater_pourcentage(pct_couleurs) if pct_couleurs else "")
+            pct_couleurs_item = QTableWidgetItem(normaliser_decimal(formater_pourcentage(pct_couleurs)) if pct_couleurs else "")
             pct_couleurs_item.setTextAlignment(Qt.AlignCenter)
             self._appliquer_couleur_objectif(pct_couleurs_item, pct_couleurs, self.objectifs.get('pct_couleurs'), True)
             self.table.setItem(i, 5, pct_couleurs_item)
             
             # % Soins
             pct_soins = data.get('pourcentage_soins')
-            pct_soins_item = QTableWidgetItem(formater_pourcentage(pct_soins) if pct_soins else "")
+            pct_soins_item = QTableWidgetItem(normaliser_decimal(formater_pourcentage(pct_soins)) if pct_soins else "")
             pct_soins_item.setTextAlignment(Qt.AlignCenter)
             self._appliquer_couleur_objectif(pct_soins_item, pct_soins, self.objectifs.get('pct_soins'), True)
             self.table.setItem(i, 6, pct_soins_item)
         
-        # Débloquer les signaux
         self.table.blockSignals(False)
     
     def _on_item_changed(self, item):
         """Appelé quand une cellule est modifiée"""
-        if item.column() == 0:  # Colonne Périodes non éditable
+        if item.column() == 0:
             return
         
-        # Formater automatiquement selon la colonne
+        self.donnees_modifiees = True
         text = item.text()
         
-        if item.column() in [1, 2]:  # C.A. Total, C.A. /Jour
-            valeur = parser_montant(text)
+        if item.column() in [1, 2]:  # Montants
+            valeur = parser_decimal(text.replace("€", "").strip())
             if valeur is not None:
                 self.table.blockSignals(True)
-                item.setText(formater_montant(valeur))
+                item.setText(normaliser_decimal(formater_montant(valeur)))
                 item.setTextAlignment(Qt.AlignCenter)
                 
-                # Appliquer la couleur
                 if item.column() == 1:
                     self._appliquer_couleur_objectif(item, valeur, self.objectifs.get('ca_total'))
                 else:
@@ -329,19 +322,18 @@ class SuivisManagerWidget(QWidget):
         elif item.column() == 3:  # Nombre de Visites
             item.setTextAlignment(Qt.AlignCenter)
             try:
-                valeur = float(text) if text.strip() else None
+                valeur = float(text.replace(',', '.')) if text.strip() else None
                 self._appliquer_couleur_objectif(item, valeur, self.objectifs.get('nb_clients'))
             except ValueError:
                 pass
         
         elif item.column() in [4, 5, 6]:  # Pourcentages
-            valeur = parser_pourcentage(text)
+            valeur = parser_decimal(text.replace("%", "").strip())
             if valeur is not None:
                 self.table.blockSignals(True)
-                item.setText(formater_pourcentage(valeur))
+                item.setText(normaliser_decimal(formater_pourcentage(valeur)))
                 item.setTextAlignment(Qt.AlignCenter)
                 
-                # Appliquer la couleur
                 if item.column() == 4:
                     self._appliquer_couleur_objectif(item, valeur, self.objectifs.get('pct_ventes'), True)
                 elif item.column() == 5:
@@ -351,12 +343,22 @@ class SuivisManagerWidget(QWidget):
                 
                 self.table.blockSignals(False)
     
+    def _on_cell_exit(self, currentRow, currentColumn, previousRow, previousColumn):
+        """Sauvegarde automatique quand on quitte une cellule"""
+        if self.donnees_modifiees and previousRow >= 0:
+            self._sauvegarder_donnees_silencieuse()
+    
+    def _nouveau_mois_with_save(self):
+        """Sauvegarde automatique avant nouveau mois"""
+        if self.donnees_modifiees:
+            self._sauvegarder_donnees_silencieuse()
+        self._nouveau_mois()
+    
     def _nouveau_mois(self):
         """Crée un nouveau mois"""
         mois = self.mois_combo.currentIndex() + 1
         annee = int(self.annee_combo.currentText())
         
-        # Vérifier si existe déjà
         suivi = self.db.get_suivi_by_mois_annee(mois, annee)
         
         if suivi:
@@ -379,13 +381,16 @@ class SuivisManagerWidget(QWidget):
             )
             self._charger_donnees()
     
+    def _reinitialiser_mois_with_save(self):
+        """Réinitialisation sans sauvegarde"""
+        self._reinitialiser_mois()
+    
     def _reinitialiser_mois(self):
-        """Réinitialise le mois en cours (supprime toutes les données)"""
+        """Réinitialise le mois en cours"""
         mois = self.mois_combo.currentIndex() + 1
         annee = int(self.annee_combo.currentText())
         mois_nom = self.mois_combo.currentText()
         
-        # Vérifier s'il y a des données à supprimer
         suivi = self.db.get_suivi_by_mois_annee(mois, annee)
         
         if not suivi:
@@ -395,7 +400,6 @@ class SuivisManagerWidget(QWidget):
             )
             return
         
-        # Demander confirmation avec avertissement
         reply = QMessageBox.warning(
             self, "⚠️ Confirmation de réinitialisation",
             f"<b>Attention !</b><br><br>"
@@ -404,16 +408,14 @@ class SuivisManagerWidget(QWidget):
             f"Cette action est <b>irréversible</b>.<br><br>"
             f"Voulez-vous vraiment continuer ?",
             QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No  # Bouton par défaut
+            QMessageBox.No
         )
         
         if reply == QMessageBox.Yes:
-            # Supprimer le suivi (cascade supprimera aussi les périodes)
             if self.db.supprimer_suivi(suivi['id']):
                 self.suivi_id_courant = None
-                
-                # Vider le tableau
                 self._charger_donnees()
+                self.donnees_modifiees = False
                 
                 QMessageBox.information(
                     self, "Réinitialisation réussie",
@@ -426,34 +428,30 @@ class SuivisManagerWidget(QWidget):
                     "Une erreur est survenue lors de la réinitialisation."
                 )
     
-    def _sauvegarder_donnees(self):
-        """Sauvegarde les données du tableau"""
+    def _sauvegarder_donnees_silencieuse(self):
+        """Sauvegarde sans message de confirmation"""
         mois = self.mois_combo.currentIndex() + 1
         annee = int(self.annee_combo.currentText())
         
-        # Créer le suivi s'il n'existe pas
         if not self.suivi_id_courant:
             self.suivi_id_courant = self.db.creer_suivi(mois, annee)
         
-        # Sauvegarder chaque période
         for i in range(self.table.rowCount()):
             date_debut, date_fin = self.periodes_dates[i]
             
-            # Récupérer les valeurs
-            ca_total = parser_montant(self.table.item(i, 1).text() if self.table.item(i, 1) else "")
-            ca_jour = parser_montant(self.table.item(i, 2).text() if self.table.item(i, 2) else "")
+            ca_total = parser_decimal((self.table.item(i, 1).text() if self.table.item(i, 1) else "").replace("€", ""))
+            ca_jour = parser_decimal((self.table.item(i, 2).text() if self.table.item(i, 2) else "").replace("€", ""))
             
             nb_visites_text = self.table.item(i, 3).text() if self.table.item(i, 3) else ""
-            nb_visites = int(nb_visites_text) if nb_visites_text.strip() else None
+            nb_visites = int(float(nb_visites_text.replace(',', '.'))) if nb_visites_text.strip() else None
             
-            pct_ventes = parser_pourcentage(self.table.item(i, 4).text() if self.table.item(i, 4) else "")
-            pct_couleurs = parser_pourcentage(self.table.item(i, 5).text() if self.table.item(i, 5) else "")
-            pct_soins = parser_pourcentage(self.table.item(i, 6).text() if self.table.item(i, 6) else "")
+            pct_ventes = parser_decimal((self.table.item(i, 4).text() if self.table.item(i, 4) else "").replace("%", ""))
+            pct_couleurs = parser_decimal((self.table.item(i, 5).text() if self.table.item(i, 5) else "").replace("%", ""))
+            pct_soins = parser_decimal((self.table.item(i, 6).text() if self.table.item(i, 6) else "").replace("%", ""))
             
-            # Sauvegarder dans la BDD
             self.db.sauvegarder_periode(
                 self.suivi_id_courant,
-                i + 1,  # numero_periode
+                i + 1,
                 date_debut.strftime("%Y-%m-%d"),
                 date_fin.strftime("%Y-%m-%d"),
                 ca_total,
@@ -464,10 +462,21 @@ class SuivisManagerWidget(QWidget):
                 pct_soins
             )
         
+        self.donnees_modifiees = False
+    
+    def _sauvegarder_donnees(self):
+        """Sauvegarde les données du tableau"""
+        self._sauvegarder_donnees_silencieuse()
         QMessageBox.information(
             self, "Sauvegarde",
             "Les données ont été sauvegardées avec succès !"
         )
+    
+    def _exporter_pdf_with_save(self):
+        """Sauvegarde automatique avant export PDF"""
+        if self.donnees_modifiees:
+            self._sauvegarder_donnees_silencieuse()
+        self._exporter_pdf()
     
     def _exporter_pdf(self):
         """Exporte le tableau en PDF"""
@@ -475,7 +484,6 @@ class SuivisManagerWidget(QWidget):
         annee = int(self.annee_combo.currentText())
         mois_nom = self.mois_combo.currentText()
         
-        # Vérifier qu'il y a des données
         if not self.periodes_dates:
             QMessageBox.warning(
                 self, "Aucune donnée",
@@ -483,31 +491,45 @@ class SuivisManagerWidget(QWidget):
             )
             return
         
-        # Charger les infos du salon
         info_salon = charger_info_salon()
         
-        # Créer le nom de fichier avec le format : [NOM SALON] [VILLE] - Suivi Manager - [ANNEE] [MOIS].pdf
         nom_salon_clean = nettoyer_nom_fichier(info_salon['nom']) if info_salon['nom'] else "Salon"
         ville_clean = nettoyer_nom_fichier(info_salon['ville']) if info_salon['ville'] else ""
-        mois_chiffre = f"{mois:02d}"  # Format 01, 02, etc.
+        mois_chiffre = f"{mois:02d}"
         
         if ville_clean:
             filename_suggestion = f"{nom_salon_clean} {ville_clean} - Suivi Manager - {annee} {mois_chiffre}.pdf"
         else:
             filename_suggestion = f"{nom_salon_clean} - Suivi Manager - {annee} {mois_chiffre}.pdf"
         
-        # Demander où sauvegarder le fichier
+        import configparser
+        from pathlib import Path
+        config = configparser.ConfigParser()
+        config.read('config.ini', encoding='utf-8')
+        
+        dernier_chemin = config.get('PDF', 'dernier_chemin', fallback='')
+        if dernier_chemin and Path(dernier_chemin).exists():
+            chemin_initial = str(Path(dernier_chemin) / filename_suggestion)
+        else:
+            chemin_initial = filename_suggestion
+        
         filepath, _ = QFileDialog.getSaveFileName(
             self,
             "Enregistrer le PDF",
-            filename_suggestion,
+            chemin_initial,
             "Fichiers PDF (*.pdf)"
         )
         
         if not filepath:
-            return  # L'utilisateur a annulé
+            return
         
-        # Récupérer les données du suivi
+        dossier_pdf = str(Path(filepath).parent)
+        if not config.has_section('PDF'):
+            config.add_section('PDF')
+        config.set('PDF', 'dernier_chemin', dossier_pdf)
+        with open('config.ini', 'w', encoding='utf-8') as f:
+            config.write(f)
+        
         suivi = self.db.get_suivi_by_mois_annee(mois, annee)
         
         if suivi:
@@ -515,16 +537,13 @@ class SuivisManagerWidget(QWidget):
         else:
             periodes_data = []
         
-        # Créer un dictionnaire des données par numéro de période
         data_dict = {p['numero_periode']: p for p in periodes_data}
         
-        # Préparer les données dans l'ordre des périodes
         donnees_ordonnees = []
         for i in range(len(self.periodes_dates)):
             donnees_ordonnees.append(data_dict.get(i + 1, {}))
         
-        # Générer le PDF
-        exporter = SuivisManagerPDFExporter(self.objectifs)  # Passer les objectifs
+        exporter = SuivisManagerPDFExporter(self.objectifs)
         success = exporter.generer_pdf(
             filepath,
             mois_nom,
@@ -539,7 +558,6 @@ class SuivisManagerWidget(QWidget):
                 f"Le PDF a été généré avec succès :\n{filepath}"
             )
             
-            # Demander si l'utilisateur veut ouvrir le fichier
             reply = QMessageBox.question(
                 self, "Ouvrir le PDF",
                 "Voulez-vous ouvrir le fichier PDF ?",
@@ -552,15 +570,21 @@ class SuivisManagerWidget(QWidget):
                 
                 if platform.system() == 'Windows':
                     os.startfile(filepath)
-                elif platform.system() == 'Darwin':  # macOS
+                elif platform.system() == 'Darwin':
                     os.system(f'open "{filepath}"')
-                else:  # Linux
+                else:
                     os.system(f'xdg-open "{filepath}"')
         else:
             QMessageBox.critical(
                 self, "Erreur",
                 "Une erreur est survenue lors de la génération du PDF."
             )
+    
+    def closeEvent(self, event):
+        """Sauvegarde automatique à la fermeture"""
+        if self.donnees_modifiees:
+            self._sauvegarder_donnees_silencieuse()
+        event.accept()
     
     def recharger_objectifs(self):
         """Recharge les objectifs et rafraîchit l'affichage"""
