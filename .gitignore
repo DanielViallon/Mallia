@@ -12,3 +12,10 @@ venv/
 
 # Config sensible
 config.ini
+
+# Fichiers générés
+__pycache__/
+*.pyc
+*.pdf
+*.db
+
